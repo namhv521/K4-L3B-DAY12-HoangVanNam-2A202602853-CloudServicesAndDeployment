@@ -23,3 +23,5 @@ Thumbs.db
 
 # Tài liệu nội bộ của giảng viên — không đẩy lên repo phát cho học viên
 solution/
+
+.dockerignore

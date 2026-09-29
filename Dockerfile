@@ -1,34 +1,49 @@
 # ═══════════════════════════════════════════════════════════════════
-# CP2 — Containerization
-#
-# Dưới đây là Dockerfile "chạy được nhưng chưa production": một stage,
-# chạy bằng user root, không có health check, base image nặng.
-#
-# NHIỆM VỤ: sửa file này thành bản production-ready. Yêu cầu:
-#   [ ] Multi-stage build: stage `builder` cài dependency, stage runtime
-#       chỉ copy kết quả sang → image nhỏ hơn, không mang theo compiler.
-#       Cú pháp: `FROM python:3.11-slim AS builder`
-#   [ ] Base image slim (hoặc alpine), không dùng `python:3.11` bản đầy đủ
-#   [ ] COPY requirements.txt và pip install TRƯỚC khi COPY source code
-#       (Docker cache theo layer: sửa 1 dòng code không phải cài lại thư viện)
-#   [ ] Tạo user thường và chuyển sang bằng lệnh `USER` — container chạy
-#       root nghĩa là ai thoát được khỏi app cũng thành root trên host
-#   [ ] Có `HEALTHCHECK` gọi vào endpoint /health
-#   [ ] Đọc cổng từ biến môi trường PORT (cloud tự gán cổng, không cố định 8000)
-#
-# Kiểm tra:  pytest tests/test_cp2.py -v
-# Build thử: docker build -t day12-agent:prod .
-#            docker images day12-agent:prod     # xem dung lượng
+# CP2 — Containerization (production-ready)
 # ═══════════════════════════════════════════════════════════════════
 
-FROM python:3.11
+# ── Stage 1: builder ──────────────────────────────────────────────
+# Stage này cài thư viện (có thể cần compiler). Nó sẽ bị bỏ đi sau,
+# chỉ giữ lại /install — nên image cuối không mang theo build tools.
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# Copy requirements TRƯỚC — Docker cache layer này riêng.
+# Nếu chỉ sửa code (không đổi requirements.txt), layer pip install
+# được dùng lại từ cache → build nhanh hơn nhiều.
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+
+# ── Stage 2: runtime ──────────────────────────────────────────────
+# Chỉ copy KẾT QUẢ từ builder, không mang theo compiler hay build tools.
+FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-COPY . .
+# Copy thư viện đã cài từ stage builder
+COPY --from=builder /install /usr/local
 
-RUN pip install -r requirements.txt
+# Tạo user thường (không phải root).
+# Container chạy root: nếu có lỗ hổng trong app, kẻ tấn công
+# có thể thoát container với quyền root trên host.
+RUN useradd --create-home --uid 10001 appuser
 
+# Copy source code (SAU khi copy requirements → cache hit khi chỉ đổi code)
+COPY app ./app
+COPY utils ./utils
+
+# Chuyển sang user thường trước khi chạy
+USER appuser
+
+# Cloud (Railway, Render, Cloud Run) tự gán cổng qua biến PORT.
+# 0.0.0.0 để nhận kết nối từ bên ngoài container (127.0.0.1 thì không ai gọi được).
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Kiểm tra process còn sống không — orchestrator dùng để quyết định có restart không.
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${PORT:-8000}/health').read()" || exit 1
+
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
