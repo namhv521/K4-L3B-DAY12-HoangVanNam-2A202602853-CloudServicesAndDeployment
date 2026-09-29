@@ -5,6 +5,17 @@
 Đưa một AI agent từ `localhost:8000` lên một địa chỉ công khai mà người khác
 gọi được, có bảo mật, có giới hạn chi phí, và không sập khi bạn deploy bản mới.
 
+## Kết Quả Triển Khai
+
+- Platform: Render
+- Public URL: <https://day12-agent-ntit.onrender.com>
+- Health check: <https://day12-agent-ntit.onrender.com/health>
+- CI/CD: GitHub Actions chạy test, build Docker image, deploy và smoke test
+- Minh chứng: [dashboard 1](screenshots/dashboard1.png),
+  [dashboard 2](screenshots/dashboard2.png), [build log](screenshots/buildlog.png),
+  [health check](screenshots/health.png)
+- Chi tiết cấu hình và kết quả kiểm tra: [DEPLOYMENT.md](DEPLOYMENT.md)
+
 ---
 
 ## ⚠️ Bài Làm Cá Nhân
