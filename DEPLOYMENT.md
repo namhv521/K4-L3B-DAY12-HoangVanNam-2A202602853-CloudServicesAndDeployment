@@ -10,9 +10,9 @@
 
 | Mục | Nội dung |
 |-----|----------|
-| Họ và tên | (điền họ tên) |
-| Mã học viên | (điền mã học viên) |
-| Repo | (điền link repo K4-L3B-DAY12-HoVaTen-MSSV-CloudServicesAndDeployment) |
+| Họ và tên | Hoàng Văn nam  |
+| Mã học viên | 2A202620853 |
+| Repo | https://github.com/namhv521/K4-L3B-DAY12-HoangVanNam-2A202602853-CloudServicesAndDeployment |
 
 ## Service
 

@@ -37,8 +37,11 @@ services:
 
   agent:
     build: .
-    ports:
-      - "8000:8000"
+    # KHÔNG map port ra host — nginx đứng trước và phân phối traffic
+    # Khi scale (--scale agent=3), nếu bind 8000:8000 thì chỉ 1 container
+    # được phép bind → các instance còn lại bị lỗi "port already allocated"
+    expose:
+      - "8000"
     environment:
       AGENT_API_KEY: ${AGENT_API_KEY}       # đọc từ .env, KHÔNG viết thẳng khóa
       REDIS_URL: redis://redis:6379/0        # `redis` = tên service = hostname trong compose
@@ -55,6 +58,19 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    restart: unless-stopped
+
+  # Nginx: load balancer đứng trước các agent instance
+  # Docker DNS tự trả về IP của tất cả container tên `agent`
+  # → Nginx round-robin qua từng IP
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8000:80"       # bên ngoài gọi :8000, nginx nhận ở :80 rồi forward vào agent
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - agent
     restart: unless-stopped
 
 volumes:
