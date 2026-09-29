@@ -104,7 +104,12 @@ def ready(store: ConversationStore = Depends(get_store)):
     Khác /health ở chỗ: endpoint này ĐƯỢC PHÉP kiểm tra dependency. Load
     balancer dùng nó để quyết định có đẩy request vào instance này không.
     """
-    raise NotImplementedError("TODO (CP4): cài đặt /ready")
+    if lifecycle.shutting_down:
+        return JSONResponse(status_code=503, content={"status": "shutting_down"})
+    redis_ok = store.ping()
+    if not redis_ok:
+        return JSONResponse(status_code=503, content={"status": "not ready", "redis": False})
+    return {"status": "ready", "redis": True}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -147,7 +152,42 @@ def ask(
     ``user_id`` do ``verify_api_key`` trả về, nên request không có API key
     hợp lệ sẽ dừng ở 401 trước khi chạm vào bất cứ dòng nào ở đây.
     """
-    raise NotImplementedError("TODO (CP3/CP4): cài đặt /ask")
+    # 1. Rate limit — chặn TRƯỚC khi gọi LLM (tiền mất ở bước gọi LLM)
+    limiter.check(user_id)
+
+    # 2. Cost guard — kiểm tra ngân sách tháng
+    guard.check(user_id)
+
+    # 3. Lấy lịch sử hội thoại từ Redis (stateless: mọi instance cùng nhìn)
+    history = store.get_history(user_id)
+
+    # 4. Gọi LLM (mock, không cần API key thật)
+    result = ask_llm(payload.question, history)
+
+    # 5. Lưu cả 2 lượt vào lịch sử
+    store.append(user_id, "user", payload.question)
+    store.append(user_id, "assistant", result["answer"])
+
+    # 6. Ghi nhận chi phí
+    guard.record(user_id, result["cost_usd"])
+
+    # 7. Log có cấu trúc — cloud lọc/đếm được
+    log_event(
+        "ask_completed",
+        user_id=user_id,
+        tokens_in=result["tokens_in"],
+        tokens_out=result["tokens_out"],
+        cost_usd=result["cost_usd"],
+    )
+
+    # 8. Trả response
+    return {
+        "answer": result["answer"],
+        "user_id": user_id,
+        "history_length": len(history),
+        "cost_usd": result["cost_usd"],
+        "tokens": {"in": result["tokens_in"], "out": result["tokens_out"]},
+    }
 
 
 if __name__ == "__main__":
